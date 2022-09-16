@@ -11,7 +11,7 @@ import config
 url = Template('https://comics.ha.com/c/item.zx?saleNo=$saleNo&lotNo=$lotNo')
 
 # saleNo <-> Auction Number
-csvHeaders = ['Lot Number', 'Auction Number', 'Url', 'Title', 'Current Price', 'Current # Bids', 'Current # Watchers',
+csvHeaders = ['Lot Number', 'Sale Number', 'Url', 'Title', 'Current Price', 'Current # Bids', 'Current # Watchers',
               '# Page Views', 'Time Left']
 
 
@@ -30,6 +30,10 @@ def parseRow(page: BeautifulSoup, row: []) -> []:
 
     # Get the current price
     price = page.find(class_="current-bid-header").find('span').text.replace('$', '').replace(',', '').strip()
+    if not price.isnumeric():
+        # in the case the auction is already completed
+        price = page.find('a', class_='shipping')['data-shipping-amount']
+
     row.append(price)
 
     # Get the current number of bids
@@ -38,6 +42,8 @@ def parseRow(page: BeautifulSoup, row: []) -> []:
 
     # Get the current number of watchers
     watchers = page.find(id="number-trackers").text.replace(',', '').strip()
+    if not watchers.isnumeric():
+        watchers = 0
     row.append(watchers)
 
     # Get the number of page views
@@ -45,15 +51,20 @@ def parseRow(page: BeautifulSoup, row: []) -> []:
     row.append(views)
 
     # Get the time left
-    timeLeft = page.find("small", class_="lot-close-time-display").text.strip()
+    try:
+        timeLeft = page.find("small", class_="lot-close-time-display").text.strip()
+    except AttributeError:
+        # in the case the auction is already completed
+        timeLeft = 0
     row.append(timeLeft)
 
     return row
 
 
-lotNo = input("Enter Lot Number: ")
-saleNo = input("Enter First Sale Number: ")
-totalNoItems = input("Enter Total Number of Items: ")
+saleNo = int(input("Enter Sale/Auction Number: "))
+lotNo = int(input("Enter First Lot Number: "))
+totalNoItems = int(input("Enter Total Number of Items to Scrape: "))
+delay = float(input("Enter Delay Between Queries (seconds): "))
 
 # get cookies and headers from https://curlconverter.com/
 cookies = config.cookies
@@ -62,6 +73,30 @@ headers = config.headers
 data = []
 
 session = requests.Session()
+session.headers.update(headers)
+session.cookies.update(cookies)
+
+print("Logging in...")
+try:
+    loginPage = session.get('https://comics.ha.com/c/login.zx')
+    loginSoup = BeautifulSoup(loginPage.text, 'html.parser')
+    formToken = loginSoup.find('input', {'name': 'formToken'})['value']
+    loginData = {
+        'validCheck': 'valid',
+        'source': 'nav',
+        'forceLogin': '',
+        'loginAction': 'log-in',
+        'formToken': formToken,
+        'findMe': '',
+        'username': config.username,
+        'password': config.password,
+        'chkRememberPassword': '1',
+        'loginButton': 'Sign In',
+    }
+    loginResponse = session.post('https://comics.ha.com/c/login.zx', data=loginData)
+    print(loginResponse)
+except TypeError:
+    print("Already logged in, continuing...")
 
 print(f"starting at {datetime.datetime.now()}...")
 for i in range(totalNoItems):
@@ -70,7 +105,7 @@ for i in range(totalNoItems):
     try:
         while 1:
             print(f"getting {currentUrl}...")
-            r = session.get(currentUrl, headers=headers)
+            r = session.get(currentUrl)
             if r.status_code == 200:
                 break
             else:
@@ -87,11 +122,12 @@ for i in range(totalNoItems):
         data.append(currentRow)
 
     except Exception as e:
-        print(f'Error parsing auction @ {currentUrl}, response {r.status_code} with error \n{e}')
+        print(f'Error parsing auction @ {currentUrl}, response {r.status_code} with error: {e}\nsleeping...')
+        time.sleep(delay)
         continue
 
     print("row parsed, sleeping...")
-    time.sleep(5)
+    time.sleep(delay)
     print("continuing...")
 
 if len(data) > 0:
@@ -102,3 +138,5 @@ if len(data) > 0:
 
     data = pd.DataFrame(data, columns=csvHeaders)
     data.to_csv(filename, index=False)
+
+    print(f"done! saved as {filename}")
