@@ -1,1 +1,44 @@
-ha-web-scraper
+<div class="grid align-items-center">
+  <div class="col-4">
+    <input type="file" (change)="onFileSelected($event)" accept=".csv">
+  </div>
+
+  <div class="col-4">
+    <p-dropdown
+      [(ngModel)]="selectedXAxis"
+      [style]="{'width':'100%'}"
+      [options]="dropdownOptions"
+      [disabled]="columnHeaders.length === 0"
+      (onChange)="updateSelectedXAxis($event)">
+      <ng-template let-item pTemplate="selectedItem">
+        X = {{item}}
+      </ng-template>
+      <ng-template let-item pTemplate="item">
+        {{item}}
+      </ng-template>
+    </p-dropdown>
+  </div>
+
+  <div class="col-4">
+    <p-dropdown
+      [(ngModel)]="selectedYAxis"
+      [style]="{'width':'100%'}"
+      [options]="dropdownOptions"
+      [disabled]="columnHeaders.length === 0"
+      (onChange)="updateSelectedYAxis($event)">
+      <ng-template let-item pTemplate="selectedItem">
+        Y = {{item}}
+      </ng-template>
+      <ng-template let-item pTemplate="item">
+        {{item}}
+      </ng-template>
+    </p-dropdown>
+  </div>
+</div>
+
+<canvas baseChart
+        [datasets]="scatterChartDatasets"
+        [options]="scatterChartOptions"
+        [legend]="false"
+        [type]="'scatter'">
+</canvas>
